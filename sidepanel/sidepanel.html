@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Multi-Broadcaster</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="brand-badge" aria-hidden="true">AI</div>
+        <div class="brand-text">
+          <h1 class="app-title">Multi-Broadcaster</h1>
+          <p class="app-subtitle">Zero-Trust Simultaneous AI Dispatch</p>
+        </div>
+      </div>
+      <span class="security-pill" title="Volatile memory only. Zero storage persistence.">
+        Volatile Memory Mode
+      </span>
+    </header>
+
+    <!-- Target AI Providers Section -->
+    <section class="panel-card" aria-labelledby="targets-heading">
+      <div class="section-header">
+        <h2 id="targets-heading" class="section-title">Target AI Platforms</h2>
+        <div class="section-actions">
+          <button type="button" id="open-missing-btn" class="ghost-btn" title="Open tabs for any selected provider not currently open">
+            Open Missing
+          </button>
+          <button type="button" id="refresh-tabs-btn" class="ghost-btn" title="Re-scan open browser tabs">
+            Refresh
+          </button>
+        </div>
+      </div>
+      <div id="provider-grid" class="provider-grid" role="group" aria-label="AI Provider Targets">
+        <!-- Populated dynamically via safe DOM APIs (createElement + textContent) -->
+      </div>
+    </section>
+
+    <!-- Image Attachments Section -->
+    <section class="panel-card" aria-labelledby="attachments-heading">
+      <div class="section-header">
+        <h2 id="attachments-heading" class="section-title">
+          Image Attachments
+          <span id="attachment-count-badge" class="count-badge">0 / 10</span>
+        </h2>
+        <button type="button" id="clear-images-btn" class="ghost-btn danger-text hidden">
+          Clear All
+        </button>
+      </div>
+
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Attach images by clicking, dragging and dropping, or pasting from clipboard">
+        <input
+          type="file"
+          id="file-input"
+          class="sr-only"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+        >
+        <div class="dropzone-content">
+          <span class="dropzone-title">Drop images here, click to browse, or Ctrl+V</span>
+          <span class="dropzone-hint">PNG, JPEG, WEBP, GIF (Max 10 images, volatile memory only)</span>
+        </div>
+      </div>
+
+      <div id="attachment-list" class="attachment-list hidden" aria-live="polite">
+        <!-- Populated via safe DOM creation -->
+      </div>
+    </section>
+
+    <!-- Prompt Composer Section -->
+    <section class="panel-card composer-card" aria-labelledby="prompt-heading">
+      <div class="section-header">
+        <label id="prompt-heading" for="prompt-input" class="section-title">Prompt</label>
+        <span id="char-counter" class="meta-counter">0 chars</span>
+      </div>
+
+      <textarea
+        id="prompt-input"
+        class="prompt-textarea"
+        rows="6"
+        maxlength="200000"
+        placeholder="Type your prompt once... (Press Ctrl+Enter to broadcast to all active AI tabs)"
+      ></textarea>
+
+      <div class="composer-controls">
+        <label class="checkbox-label">
+          <input type="checkbox" id="clear-after-send" checked>
+          <span>Wipe prompt &amp; images from memory after Send</span>
+        </label>
+
+        <button type="button" id="send-btn" class="primary-send-btn">
+          <span id="send-btn-text">Broadcast Prompt</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Dispatch Telemetry & Status Feed -->
+    <section id="status-section" class="panel-card status-card hidden" aria-live="polite">
+      <div class="section-header">
+        <h2 class="section-title">Broadcast Status</h2>
+        <button type="button" id="dismiss-status-btn" class="ghost-btn">Clear</button>
+      </div>
+      <ul id="status-list" class="status-list">
+        <!-- Populated via safe DOM creation -->
+      </ul>
+    </section>
+  </div>
+
+  <script src="../utils/security.js"></script>
+  <script src="../providers.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
+

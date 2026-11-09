@@ -1,0 +1,30 @@
+# Chrome Extension packaged archives & private signing keys (NEVER commit .pem keys)
+*.zip
+*.crx
+*.pem
+*.key
+
+# Local build / obfuscated output directories
+dist/
+dist-local/
+build/
+
+# Dependencies & logs (if any tooling is added later)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
