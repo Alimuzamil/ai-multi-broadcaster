@@ -92,6 +92,19 @@
           <span>Wipe prompt &amp; images from memory after Send</span>
         </label>
 
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-share-toggle" checked>
+          <span>Generate public share links after send</span>
+        </label>
+
+        <p id="auto-share-warning" class="share-warning-text hidden" role="status">
+          Anyone with a link can read that conversation.
+        </p>
+
+        <div id="share-confirm-container" class="share-confirm-container hidden" aria-live="polite">
+          <!-- Populated dynamically via createElement + textContent -->
+        </div>
+
         <button type="button" id="send-btn" class="primary-send-btn">
           <span id="send-btn-text">Broadcast Prompt</span>
         </button>
@@ -105,6 +118,27 @@
         <button type="button" id="dismiss-status-btn" class="ghost-btn">Clear</button>
       </div>
       <ul id="status-list" class="status-list">
+        <!-- Populated via safe DOM creation -->
+      </ul>
+    </section>
+
+    <!-- Shared Links Card (Auto Share Engine & SEO/AEO Citations) -->
+    <section id="shared-links-section" class="panel-card share-links-card hidden" aria-live="polite" aria-labelledby="shared-links-heading">
+      <div class="section-header">
+        <h2 id="shared-links-heading" class="section-title">Shared Links</h2>
+        <div class="section-actions">
+          <button type="button" id="copy-all-links-btn" class="ghost-btn" title="Copy all verified public share URLs (one per line)">
+            Copy all links
+          </button>
+          <button type="button" id="copy-seo-links-btn" class="ghost-btn" title="Copy verified public share links formatted as Markdown citations for SEO and AEO">
+            Copy SEO/AEO
+          </button>
+          <button type="button" id="clear-shared-links-btn" class="ghost-btn danger-text" title="Clear shared links from volatile memory">
+            Clear
+          </button>
+        </div>
+      </div>
+      <ul id="shared-links-list" class="shared-links-list">
         <!-- Populated via safe DOM creation -->
       </ul>
     </section>

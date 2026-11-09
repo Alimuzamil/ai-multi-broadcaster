@@ -48,10 +48,28 @@ configureSidePanelBehavior();
  */
 async function ensureContentScriptReady(tabId) {
   try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/clipboard-hook.js'],
+      world: 'MAIN'
+    });
+  } catch {
+    // Ignore if tab cannot be scripted
+  }
+
+  try {
     const pingResponse = await chrome.tabs.sendMessage(tabId, {
       action: 'PING_PROVIDER'
     });
     if (pingResponse && pingResponse.ok && pingResponse.version === '1.3.0') {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['utils/security.js', 'providers.js', 'content/share-engine.js']
+        });
+      } catch {
+        // Ignore
+      }
       return true;
     }
   } catch {
@@ -61,7 +79,12 @@ async function ensureContentScriptReady(tabId) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ['utils/security.js', 'providers.js', 'content/injector.js']
+      files: [
+        'utils/security.js',
+        'providers.js',
+        'content/injector.js',
+        'content/share-engine.js'
+      ]
     });
     return true;
   } catch {
@@ -212,6 +235,8 @@ async function handleBroadcastToProviders(payload) {
       const ready = await ensureContentScriptReady(target.tabId);
       if (!ready) {
         return {
+          ok: false,
+          provider: target.providerKey,
           providerKey: target.providerKey,
           providerName: target.providerName,
           tabId: target.tabId,
@@ -235,6 +260,8 @@ async function handleBroadcastToProviders(payload) {
               ? `${response.uploadMethodUsed}, ${response.sentVia || 'click'}`
               : response.sentVia || 'click';
           return {
+            ok: true,
+            provider: target.providerKey,
             providerKey: target.providerKey,
             providerName: target.providerName,
             tabId: target.tabId,
@@ -244,6 +271,8 @@ async function handleBroadcastToProviders(payload) {
         }
 
         return {
+          ok: false,
+          provider: target.providerKey,
           providerKey: target.providerKey,
           providerName: target.providerName,
           tabId: target.tabId,
@@ -254,6 +283,8 @@ async function handleBroadcastToProviders(payload) {
         };
       } catch (err) {
         return {
+          ok: false,
+          provider: target.providerKey,
           providerKey: target.providerKey,
           providerName: target.providerName,
           tabId: target.tabId,

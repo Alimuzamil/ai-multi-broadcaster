@@ -62,7 +62,29 @@
       ],
       uploadMethod: 'paste-or-drop',
       uploadSettleDelayMs: 900,
-      submitOnEnterFallback: true
+      submitOnEnterFallback: true,
+      // TODO VERIFY selectors in DevTools against live ChatGPT UI updates
+      share: {
+        supported: true,
+        busySelectors: [
+          'button[data-testid="stop-button"]',
+          'button[aria-label="Stop generating"]',
+          'button[aria-label*="Stop" i]'
+        ],
+        shareTriggerSelectors: [
+          'button[data-testid="share-chat-button"]',
+          'button[aria-label="Share"]',
+          'button[aria-label*="Share" i]'
+        ],
+        shareTriggerText: [/^share$/i, /^share chat$/i],
+        confirmSteps: [
+          /create (public )?link|update link|copy link/i,
+          /copy link/i
+        ],
+        shareUrlPattern: /^https:\/\/chatgpt\.com\/share\/[A-Za-z0-9-]+$/,
+        dialogSelector: '[role="dialog"], [data-radix-popper-content-wrapper], dialog',
+        responseTimeoutMs: 240000
+      }
     },
 
     claude: {
@@ -96,7 +118,32 @@
       ],
       uploadMethod: 'paste-or-drop',
       uploadSettleDelayMs: 900,
-      submitOnEnterFallback: true
+      submitOnEnterFallback: true,
+      // TODO VERIFY selectors in DevTools against live Claude UI updates
+      share: {
+        supported: true,
+        busySelectors: [
+          'button[data-testid="stop-button"]',
+          'button[aria-label="Stop Response"]',
+          'button[aria-label="Stop response"]',
+          'button[aria-label*="Stop" i]'
+        ],
+        shareTriggerSelectors: [
+          'button[data-testid="share-button"]',
+          'button[data-testid="wiggle-controls-actions-share"]',
+          'button[aria-label="Share"]',
+          'button[aria-label*="Share" i]'
+        ],
+        shareTriggerText: [/^share$/i],
+        confirmSteps: [
+          /public|anyone with the link/i,
+          /create (public )?link|share & copy link|update link|copy link/i,
+          /copy link/i
+        ],
+        shareUrlPattern: /^https:\/\/claude\.ai\/share\/[A-Za-z0-9-]+$/,
+        dialogSelector: '[role="dialog"], [data-radix-popper-content-wrapper], dialog',
+        responseTimeoutMs: 240000
+      }
     },
 
     gemini: {
@@ -132,7 +179,33 @@
       ],
       uploadMethod: 'paste-or-drop',
       uploadSettleDelayMs: 1100,
-      submitOnEnterFallback: true
+      submitOnEnterFallback: true,
+      // TODO VERIFY selectors in DevTools against live Gemini UI updates
+      share: {
+        supported: false,
+        busySelectors: [
+          'button[aria-label="Stop response"]',
+          'button[aria-label="Stop generating"]',
+          'button[aria-label*="Stop" i]',
+          'button.stop-button'
+        ],
+        shareTriggerSelectors: [
+          'button[aria-label="Share & export"]',
+          'button[aria-label="Share"]',
+          'button[aria-label*="Share" i]',
+          'button[mattooltip*="Share" i]',
+          'button[data-test-id*="share" i]'
+        ],
+        shareTriggerText: [/^share( & export)?$/i, /^share conversation$/i],
+        confirmSteps: [
+          /^share( conversation)?$/i,
+          /create public link|public link/i,
+          /create public link|copy public link|copy link/i
+        ],
+        shareUrlPattern: /^https:\/\/(?:g\.co\/gemini\/share|gemini\.google\.com\/share)\/[A-Za-z0-9_-]+$/,
+        dialogSelector: 'mat-dialog-container, [role="dialog"], [role="menu"], .mat-mdc-menu-panel',
+        responseTimeoutMs: 240000
+      }
     },
 
     venice: {
@@ -172,7 +245,72 @@
       ],
       uploadMethod: 'file-input-or-paste',
       uploadSettleDelayMs: 800,
-      submitOnEnterFallback: true
+      submitOnEnterFallback: true,
+      // TODO VERIFY selectors and real link pattern in DevTools on Venice.ai
+      share: {
+        supported: false,
+        busySelectors: [
+          'button[aria-label*="Stop" i]',
+          'button[data-testid="stop-button"]'
+        ],
+        shareTriggerSelectors: [
+          'button[data-testid*="share" i]',
+          'button[aria-label="Share"]',
+          'button[aria-label*="Share" i]',
+          'button[title*="Share" i]'
+        ],
+        shareTriggerText: [/^share$/i, /^share chat$/i],
+        confirmSteps: [
+          /create (public )?link|share|update link|copy link/i,
+          /copy link/i
+        ],
+        shareUrlPattern: /^https:\/\/(?:www\.)?venice\.ai\/(?:share|chat\/share|s|chat)\/[A-Za-z0-9_-]+$/,
+        dialogSelector: '[role="dialog"], [data-radix-popper-content-wrapper], dialog',
+        responseTimeoutMs: 240000
+      }
+    },
+
+    grok: {
+      id: 'grok',
+      name: 'Grok',
+      urlMatch: 'https://grok.com/*',
+      origin: 'https://grok.com',
+      launchUrl: 'https://grok.com/',
+      inputSelectors: [
+        'textarea[aria-label*="Ask" i]',
+        'textarea[placeholder*="Ask" i]',
+        'textarea[placeholder*="Grok" i]',
+        'textarea[dir="auto"]',
+        'form textarea',
+        'div.ProseMirror[contenteditable="true"]',
+        'div[contenteditable="true"][role="textbox"]',
+        'div[contenteditable="true"]',
+        'textarea'
+      ],
+      sendButtonSelectors: [
+        'button[aria-label="Submit"]',
+        'button[aria-label*="Submit" i]',
+        'button[aria-label="Send message"]',
+        'button[aria-label*="Send" i]',
+        'form button[type="submit"]',
+        'button[type="submit"]'
+      ],
+      fileInputSelectors: [
+        'input[type="file"][accept*="image"]',
+        'input[type="file"][multiple]',
+        'input[type="file"]'
+      ],
+      dropZoneSelectors: [
+        'form',
+        'textarea',
+        'main'
+      ],
+      uploadMethod: 'file-input-or-paste',
+      uploadSettleDelayMs: 900,
+      submitOnEnterFallback: true,
+      share: {
+        supported: false
+      }
     }
   };
 
@@ -193,6 +331,10 @@
       return null;
     }
     if (parsed.protocol !== 'https:') {
+      return null;
+    }
+    // Never treat read-only shared link preview tabs (/share/...) as active chat composer tabs
+    if (/^\/share(\/|$)/i.test(parsed.pathname)) {
       return null;
     }
     for (const [key, config] of Object.entries(AI_PROVIDERS)) {

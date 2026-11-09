@@ -12,7 +12,7 @@
 'use strict';
 
 (function initSidePanel(globalScope) {
-  const { SecurityUtils, AI_PROVIDERS } = globalScope;
+  const { SecurityUtils, ProviderRegistry, AI_PROVIDERS } = globalScope;
 
   /**
    * Volatile in-memory store for attached image files.
@@ -20,6 +20,12 @@
    * @type {Array<{ id: string, file: File, safeName: string, size: number, type: string, previewUrl: string }>}
    */
   const volatileAttachments = [];
+
+  /**
+   * Volatile in-memory store for generated public share links.
+   * @type {Array<{ tabId: number, providerKey: string, providerName: string, state: 'pending' | 'success' | 'error', shareUrl: string | null, code: string | null, message: string }>}
+   */
+  const volatileSharedLinks = [];
 
   /**
    * Selected provider keys (all 4 enabled by default in volatile state).
@@ -34,6 +40,7 @@
   let activeProviderTabs = {};
 
   let isBroadcasting = false;
+  let shareRequestCounter = 0;
 
   // DOM References
   const providerGridEl = document.getElementById('provider-grid');
@@ -47,11 +54,19 @@
   const promptInputEl = document.getElementById('prompt-input');
   const charCounterEl = document.getElementById('char-counter');
   const clearAfterSendCheckbox = document.getElementById('clear-after-send');
+  const autoShareToggle = document.getElementById('auto-share-toggle');
+  const autoShareWarningEl = document.getElementById('auto-share-warning');
+  const shareConfirmContainerEl = document.getElementById('share-confirm-container');
   const sendBtn = document.getElementById('send-btn');
   const sendBtnTextEl = document.getElementById('send-btn-text');
   const statusSectionEl = document.getElementById('status-section');
   const statusListEl = document.getElementById('status-list');
   const dismissStatusBtn = document.getElementById('dismiss-status-btn');
+  const sharedLinksSectionEl = document.getElementById('shared-links-section');
+  const sharedLinksListEl = document.getElementById('shared-links-list');
+  const copyAllLinksBtn = document.getElementById('copy-all-links-btn');
+  const copySeoLinksBtn = document.getElementById('copy-seo-links-btn');
+  const clearSharedLinksBtn = document.getElementById('clear-shared-links-btn');
 
   /**
    * Formats byte counts into human-readable KB/MB strings.
@@ -455,7 +470,288 @@
   }
 
   /**
-   * Executes the simultaneous multi-provider broadcast workflow.
+   * Maps a share-engine failure code to a concise human-readable message.
+   * @param {string | undefined} code
+   * @param {string | undefined} fallbackMsg
+   * @returns {string}
+   */
+  function formatShareErrorReason(code, fallbackMsg) {
+    const map = {
+      RESPONSE_TIMEOUT: 'Timed out waiting for AI response to complete.',
+      SHARE_BUTTON_NOT_FOUND: 'Share button not found in chat UI.',
+      LINK_NOT_FOUND: 'Could not extract public share link from dialog.',
+      BUSY: 'Share generation already in progress on this tab.',
+      UNSUPPORTED: 'Public share links not supported on this provider.',
+      INVALID_ENVELOPE: 'Security validation failed for share request.'
+    };
+    if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(map, code)) {
+      return map[code];
+    }
+    return fallbackMsg || 'Could not generate public share link.';
+  }
+
+  /**
+   * Clears all volatile shared links from memory and hides the Shared Links card.
+   */
+  function clearVolatileSharedLinks() {
+    for (let i = 0; i < volatileSharedLinks.length; i += 1) {
+      volatileSharedLinks[i] = null;
+    }
+    volatileSharedLinks.length = 0;
+    clearChildNodes(sharedLinksListEl);
+    if (sharedLinksSectionEl) {
+      sharedLinksSectionEl.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Renders the Shared Links card using createElement + textContent only.
+   */
+  function renderSharedLinksCard() {
+    if (!sharedLinksSectionEl || !sharedLinksListEl) {
+      return;
+    }
+    clearChildNodes(sharedLinksListEl);
+
+    if (volatileSharedLinks.length === 0) {
+      sharedLinksSectionEl.classList.add('hidden');
+      return;
+    }
+
+    sharedLinksSectionEl.classList.remove('hidden');
+
+    for (const item of volatileSharedLinks) {
+      if (!item) {
+        continue;
+      }
+      const li = document.createElement('li');
+      const stateClass =
+        item.state === 'success'
+          ? 'share-success'
+          : item.state === 'pending'
+          ? 'share-pending'
+          : 'share-error';
+      li.className = `shared-link-item ${stateClass}`;
+
+      const topRow = document.createElement('div');
+      topRow.className = 'shared-link-top';
+
+      const providerSpan = document.createElement('span');
+      providerSpan.className = 'shared-link-provider';
+      providerSpan.textContent = item.providerName || item.providerKey;
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'shared-link-actions';
+
+      if (item.state === 'success' && item.shareUrl) {
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'ghost-btn';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => {
+          const validUrl = SecurityUtils.validateShareUrl(item.providerKey, item.shareUrl);
+          if (!validUrl) {
+            return;
+          }
+          navigator.clipboard
+            .writeText(validUrl)
+            .then(() => {
+              copyBtn.textContent = 'Copied!';
+              setTimeout(() => {
+                copyBtn.textContent = 'Copy';
+              }, 1400);
+            })
+            .catch(() => {});
+        });
+
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'ghost-btn';
+        openBtn.textContent = 'Open';
+        openBtn.addEventListener('click', () => {
+          const validUrl = SecurityUtils.validateShareUrl(item.providerKey, item.shareUrl);
+          if (validUrl && chrome.tabs && chrome.tabs.create) {
+            chrome.tabs.create({ url: validUrl });
+          }
+        });
+
+        actionsDiv.appendChild(copyBtn);
+        actionsDiv.appendChild(openBtn);
+      } else if (item.state === 'error' && typeof item.tabId === 'number') {
+        const openChatBtn = document.createElement('button');
+        openChatBtn.type = 'button';
+        openChatBtn.className = 'open-tab-link-btn';
+        openChatBtn.textContent = 'Open chat';
+        openChatBtn.title = 'Focus this chat tab to share manually';
+        openChatBtn.addEventListener('click', () => {
+          if (chrome.tabs && chrome.tabs.update) {
+            chrome.tabs.update(item.tabId, { active: true }).catch(() => {});
+          }
+        });
+        actionsDiv.appendChild(openChatBtn);
+      }
+
+      topRow.appendChild(providerSpan);
+      topRow.appendChild(actionsDiv);
+      li.appendChild(topRow);
+
+      if (item.state === 'success' && item.shareUrl) {
+        const urlDiv = document.createElement('div');
+        urlDiv.className = 'shared-link-url';
+        urlDiv.textContent = item.shareUrl;
+        urlDiv.title = item.shareUrl;
+        li.appendChild(urlDiv);
+      } else {
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'shared-link-status';
+        statusDiv.textContent =
+          item.state === 'pending'
+            ? '\u23F3 Waiting for response\u2026'
+            : `\u26A0 ${item.message}`;
+        li.appendChild(statusDiv);
+      }
+
+      sharedLinksListEl.appendChild(li);
+    }
+  }
+
+  /**
+   * Concurrently requests native public share links from all tabs that succeeded during broadcast.
+   *
+   * @param {Array<Object>} reports
+   */
+  async function requestShareLinksForReports(reports) {
+    if (!Array.isArray(reports)) {
+      return;
+    }
+
+    const successfulTargets = reports.filter((r) => {
+      if (
+        !r ||
+        (r.ok !== true && r.status !== 'success') ||
+        typeof r.tabId !== 'number'
+      ) {
+        return false;
+      }
+      const key = r.provider || r.providerKey;
+      return Boolean(
+        typeof key === 'string' &&
+          AI_PROVIDERS[key] &&
+          AI_PROVIDERS[key].share &&
+          AI_PROVIDERS[key].share.supported
+      );
+    });
+
+    if (successfulTargets.length === 0) {
+      return;
+    }
+
+    clearVolatileSharedLinks();
+
+    for (const target of successfulTargets) {
+      const providerKey = target.provider || target.providerKey;
+      const providerConfig = AI_PROVIDERS[providerKey];
+      volatileSharedLinks.push({
+        tabId: target.tabId,
+        providerKey,
+        providerName: target.providerName || (providerConfig ? providerConfig.name : providerKey),
+        state: 'pending',
+        shareUrl: null,
+        code: null,
+        message: 'Waiting for response\u2026'
+      });
+    }
+
+    renderSharedLinksCard();
+
+    const tasks = volatileSharedLinks.map(async (entry) => {
+      try {
+        // Verify the tab is still open and on the matching provider origin before sending
+        const tabInfo = await chrome.tabs.get(entry.tabId);
+        const matched =
+          tabInfo && typeof tabInfo.url === 'string'
+            ? ProviderRegistry.matchProviderByUrl(tabInfo.url)
+            : null;
+
+        if (!matched || matched.key !== entry.providerKey) {
+          entry.state = 'error';
+          entry.code = 'UNSUPPORTED';
+          entry.message = 'Tab navigated away from provider.';
+          renderSharedLinksCard();
+          return;
+        }
+
+        shareRequestCounter += 1;
+        const requestId = `share-${Date.now()}-${shareRequestCounter}`;
+
+        const response = await chrome.tabs.sendMessage(entry.tabId, {
+          action: 'GENERATE_SHARE_LINK',
+          payload: { requestId }
+        });
+
+        if (response && response.ok && typeof response.shareUrl === 'string') {
+          const validatedUrl = SecurityUtils.validateShareUrl(
+            entry.providerKey,
+            response.shareUrl
+          );
+          if (validatedUrl) {
+            entry.state = 'success';
+            entry.shareUrl = validatedUrl;
+            entry.code = null;
+            entry.message = 'Link ready';
+            renderSharedLinksCard();
+            return;
+          }
+        }
+
+        entry.state = 'error';
+        entry.code = (response && response.code) || 'LINK_NOT_FOUND';
+        entry.message = formatShareErrorReason(
+          response && response.code,
+          response && response.message
+        );
+        renderSharedLinksCard();
+      } catch (err) {
+        entry.state = 'error';
+        entry.code = 'LINK_NOT_FOUND';
+        entry.message =
+          err instanceof Error
+            ? err.message
+            : 'Tab closed or disconnected while waiting for share link.';
+        renderSharedLinksCard();
+      }
+    });
+
+    await Promise.allSettled(tasks);
+  }
+
+  /**
+   * Hides and clears the inline public-link confirmation bar.
+   */
+  function hideShareConfirmRow() {
+    if (!shareConfirmContainerEl) {
+      return;
+    }
+    clearChildNodes(shareConfirmContainerEl);
+    shareConfirmContainerEl.classList.add('hidden');
+  }
+
+  /**
+   * Counts how many open tabs across selected providers will be targeted.
+   * @returns {number}
+   */
+  function countTargetOpenTabs() {
+    let total = 0;
+    for (const key of selectedProviders) {
+      const tabs = activeProviderTabs[key] || [];
+      total += tabs.length;
+    }
+    return total > 0 ? total : selectedProviders.size;
+  }
+
+  /**
+   * Validates inputs and either shows the one-time public-link confirmation row
+   * (when auto-share is ON) or dispatches the broadcast immediately.
    */
   async function executeBroadcast() {
     if (isBroadcasting) {
@@ -497,12 +793,31 @@
       return;
     }
 
+    const shouldGenerateShareLinks = Boolean(autoShareToggle && autoShareToggle.checked);
+    await performBroadcastDispatch(promptValidation.prompt, shouldGenerateShareLinks);
+  }
+
+  /**
+   * Executes the simultaneous multi-provider broadcast workflow and optionally
+   * triggers public share link generation across successful tabs.
+   *
+   * @param {string} validatedPrompt
+   * @param {boolean} generateShareLinks
+   */
+  async function performBroadcastDispatch(validatedPrompt, generateShareLinks) {
+    if (isBroadcasting) {
+      return;
+    }
+
+    hideShareConfirmRow();
     isBroadcasting = true;
     sendBtn.disabled = true;
     sendBtnTextEl.textContent = 'Broadcasting...';
 
     /** @type {Object | null} */
     let volatilePayload = null;
+    /** @type {Array<Object> | null} */
+    let settledReports = null;
 
     try {
       // Encode attachments to volatile Base64 DataURLs only for the duration of the IPC call
@@ -520,7 +835,7 @@
       const windowId = await getCurrentPanelWindowId();
 
       volatilePayload = {
-        prompt: promptValidation.prompt,
+        prompt: validatedPrompt,
         images: serializedImages,
         targetProviders: Array.from(selectedProviders),
         windowId
@@ -532,6 +847,7 @@
       });
 
       if (response && Array.isArray(response.reports)) {
+        settledReports = response.reports;
         renderStatusReports(response.reports);
       } else if (response && response.error) {
         renderStatusReports([
@@ -565,6 +881,10 @@
       sendBtn.disabled = false;
       sendBtnTextEl.textContent = 'Broadcast Prompt';
       refreshActiveProviders();
+    }
+
+    if (generateShareLinks && Array.isArray(settledReports)) {
+      requestShareLinksForReports(settledReports);
     }
   }
 
@@ -655,6 +975,74 @@
     statusSectionEl.classList.add('hidden');
   });
 
+  if (autoShareToggle) {
+    // Enabled by default on Side Panel open
+    autoShareToggle.checked = true;
+    autoShareToggle.addEventListener('change', () => {
+      if (!autoShareToggle.checked) {
+        hideShareConfirmRow();
+      }
+    });
+  }
+
+  if (copyAllLinksBtn) {
+    copyAllLinksBtn.addEventListener('click', () => {
+      const validUrls = [];
+      for (const item of volatileSharedLinks) {
+        if (item && item.state === 'success' && item.shareUrl) {
+          const validated = SecurityUtils.validateShareUrl(item.providerKey, item.shareUrl);
+          if (validated) {
+            validUrls.push(validated);
+          }
+        }
+      }
+      if (validUrls.length === 0) {
+        return;
+      }
+      navigator.clipboard
+        .writeText(validUrls.join('\n'))
+        .then(() => {
+          copyAllLinksBtn.textContent = 'Copied!';
+          setTimeout(() => {
+            copyAllLinksBtn.textContent = 'Copy all links';
+          }, 1400);
+        })
+        .catch(() => {});
+    });
+  }
+
+  if (copySeoLinksBtn) {
+    copySeoLinksBtn.addEventListener('click', () => {
+      const markdownLines = [];
+      for (const item of volatileSharedLinks) {
+        if (item && item.state === 'success' && item.shareUrl) {
+          const validated = SecurityUtils.validateShareUrl(item.providerKey, item.shareUrl);
+          if (validated) {
+            markdownLines.push(`- [${item.providerName} Shared Response](${validated})`);
+          }
+        }
+      }
+      if (markdownLines.length === 0) {
+        return;
+      }
+      navigator.clipboard
+        .writeText(markdownLines.join('\n'))
+        .then(() => {
+          copySeoLinksBtn.textContent = 'Copied SEO!';
+          setTimeout(() => {
+            copySeoLinksBtn.textContent = 'Copy SEO/AEO';
+          }, 1400);
+        })
+        .catch(() => {});
+    });
+  }
+
+  if (clearSharedLinksBtn) {
+    clearSharedLinksBtn.addEventListener('click', () => {
+      clearVolatileSharedLinks();
+    });
+  }
+
   // Auto-refresh tab status when browser tabs change
   if (chrome.tabs) {
     let refreshTimer = null;
@@ -680,6 +1068,8 @@
   // Strict volatile memory hygiene on panel unload/hide
   const scrubAllPanelMemory = () => {
     clearAllVolatileAttachments();
+    clearVolatileSharedLinks();
+    hideShareConfirmRow();
     if (promptInputEl) {
       promptInputEl.value = '';
     }

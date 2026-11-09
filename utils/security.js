@@ -17,7 +17,8 @@
     'DISPATCH_PROMPT',
     'BROADCAST_TO_PROVIDERS',
     'QUERY_ACTIVE_PROVIDERS',
-    'OPEN_PROVIDER_TAB'
+    'OPEN_PROVIDER_TAB',
+    'GENERATE_SHARE_LINK'
   ]));
 
   const ALLOWED_IMAGE_MIME_TYPES = Object.freeze(new Set([
@@ -284,6 +285,50 @@
   }
 
   /**
+   * Validates a candidate public share URL against strict HTTPS, credential-free,
+   * and provider-specific shareUrlPattern rules.
+   *
+   * @param {string} providerKey
+   * @param {unknown} rawUrl
+   * @returns {string | null} Normalized URL string if valid, otherwise null.
+   */
+  function validateShareUrl(providerKey, rawUrl) {
+    if (typeof providerKey !== 'string' || typeof rawUrl !== 'string') {
+      return null;
+    }
+    const trimmed = rawUrl.trim();
+    if (trimmed.length === 0 || trimmed.length > 2048) {
+      return null;
+    }
+    let parsed;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      return null;
+    }
+    if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') {
+      return null;
+    }
+    const providers = globalScope.AI_PROVIDERS;
+    if (!providers || !Object.prototype.hasOwnProperty.call(providers, providerKey)) {
+      return null;
+    }
+    const providerConfig = providers[providerKey];
+    if (
+      !providerConfig ||
+      !providerConfig.share ||
+      !(providerConfig.share.shareUrlPattern instanceof RegExp)
+    ) {
+      return null;
+    }
+    const normalized = parsed.href;
+    if (!providerConfig.share.shareUrlPattern.test(normalized)) {
+      return null;
+    }
+    return normalized;
+  }
+
+  /**
    * Explicitly scrubs a dispatch payload object in-place so sensitive prompt strings
    * and Base64 image buffers are dereferenced for immediate garbage collection.
    *
@@ -323,6 +368,7 @@
     validateImageAttachments,
     validateDispatchPayload,
     dataUrlToVolatileFile,
+    validateShareUrl,
     scrubVolatilePayload
   });
 })(typeof globalThis !== 'undefined' ? globalThis : self);
